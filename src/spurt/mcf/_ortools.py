@@ -147,7 +147,6 @@ class ORMCFSolver(MCFSolverInterface):
         self,
         graddata: ArrayLike,
     ) -> ArrayLike:
-
         if graddata.size != self.nedges:
             errmsg = (
                 f"Size mismatch for residue computation."

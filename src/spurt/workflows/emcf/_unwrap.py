@@ -72,10 +72,11 @@ def _dump_tile_to_h5(
     uw: np.ndarray,
     off: np.ndarray,
     gspace: spurt.graph.PlanarGraphInterface,
-    tile: spurt.utils.BBox,
+    tile: spurt.utils.BBox | None = None,
 ) -> None:
     with h5py.File(fname, "w") as fid:
         fid["uw_data"] = uw
         fid["points"] = gspace.points.astype(np.int32)
-        fid["tile"] = np.array(tile.tolist()).astype(np.int32)
         fid["phase_offset"] = off.astype(np.float32)
+        if tile:
+            fid["tile"] = np.array(tile.tolist()).astype(np.int32)

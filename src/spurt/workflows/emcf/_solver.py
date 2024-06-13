@@ -95,7 +95,7 @@ class EMCFSolver:
         """Retrieve the link model for the workflow."""
         return self._link_model
 
-    def unwrap_cube(self, wrap_data: Irreg3DInput) -> np.ndarray:
+    def unwrap_cube(self, wrap_data: Irreg3DInput, flow_mult=1.0) -> np.ndarray:
         """Unwrap a 3D cube of data.
 
         Parameters
@@ -129,15 +129,15 @@ class EMCFSolver:
             raise ValueError(errmsg)
 
         # First unwrap in time to get spatial gradients
-        grad_space: np.ndarray = self.unwrap_gradients_in_time(
-            wrap_data.data, input_is_ifg=input_is_ifg
+        grad_space, flows = self.unwrap_gradients_in_time(
+            wrap_data.data, input_is_ifg=input_is_ifg, flow_mult=flow_mult
         )
 
         # Then unwrap spatial gradients
         return self.unwrap_gradients_in_space(grad_space)
 
     def unwrap_gradients_in_time(
-        self, wrap_data: np.ndarray, *, input_is_ifg: bool
+        self, wrap_data: np.ndarray, *, input_is_ifg: bool, flow_mult: float = 1.0
     ) -> np.ndarray:
         """Temporally unwrap links in parallel.
 
@@ -221,13 +221,17 @@ class EMCFSolver:
             # Unwrap the batch
             logger.info(f"Temporal: Unwrapping batch {bb + 1}/{nbatches}")
             flows = self._solver_time.residues_to_flows_many(
-                residues, cost, worker_count=self.settings.worker_count
+                # residues, cost, worker_count=self.settings.worker_count
+                residues,
+                cost,
+                worker_count=1,
             )
 
             # Update the spatial gradients with estimated flows
-            grad_space[:, i_start:i_end] += 2 * np.pi * flows.T
+            grad_space[:, i_start:i_end] += 2 * np.pi * flows.T * flow_mult
+            # grad_space[:, i_start:i_end] += 0
 
-        return grad_space
+        return grad_space, flows.T
 
     def unwrap_gradients_in_space(self, grad_space: np.ndarray) -> np.ndarray:
         """Spatially unwrap each interferogram sequentially."""
@@ -257,10 +261,12 @@ class EMCFSolver:
         logger.info(f"Spatial: Number of interferograms: {self.nifgs}")
         logger.info(f"Spatial: Number of links: {self.nlinks}")
         logger.info(f"Spatial: Number of cycles: {self._solver_space.ncycles}")
+        from concurrent.futures import (
+            ProcessPoolExecutor,
+            as_completed,
+        )
 
-        for ii in range(self.nifgs):
-            logger.info(f"Spatial: Unwrapping {ii + 1} / {self.nifgs}")
-            # Slice per ifg
+        def process_ifg(ii: int):
             ifg_grad = grad_space[ii, :]
 
             # Compute residues
@@ -270,9 +276,42 @@ class EMCFSolver:
             flows = self._solver_space.residues_to_flows(residues, cost)
 
             # Flood fill
-            uw_data[ii, :] = utils.flood_fill(
+            logger.info(f"Finished unwrapping {ii + 1} / {self.nifgs}")
+            return utils.flood_fill(
                 ifg_grad, self._solver_space.edges, flows, mode="gradients"
             )
+
+        # with ThreadPoolExecutor(max_workers=self.settings.worker_count) as executor:
+        #     futures = [executor.submit(process_ifg, ii) for ii in range(self.nifgs)]
+        # with ThreadPoolExecutor(max_workers=1) as executor:
+        with ProcessPoolExecutor(max_workers=6) as executor:
+            futures = [
+                executor.submit(
+                    process_ifg2, grad_space[ii, :], self._solver_space, cost
+                )
+                for ii in range(self.nifgs)
+            ]
+        for ii, fut in enumerate(as_completed(futures)):
+            uw_data[ii, :] = fut.result()
+            logger.info(f"Spatial: unwrapped {ii + 1} / {self.nifgs}")
+
+        # for ii in range(self.nifgs):
+        #     logger.info(f"Spatial: Unwrapping {ii + 1} / {self.nifgs}")
+        #     # uw_data[ii, :] = process_ifg(ii)
+
+        #     # # Slice per ifg
+        #     # ifg_grad = grad_space[ii, :]
+
+        #     # # Compute residues
+        #     # residues = self._solver_space.compute_residues_from_gradients(ifg_grad)
+
+        #     # # Unwrap the interferogram - sequential
+        #     # flows = self._solver_space.residues_to_flows(residues, cost)
+
+        #     # # Flood fill
+        #     # uw_data[ii, :] = utils.flood_fill(
+        #     #     ifg_grad, self._solver_space.edges, flows, mode="gradients"
+        #     # )
 
         return uw_data
 
@@ -315,3 +354,16 @@ class EMCFSolver:
 
         # Update gradient in place
         grad_space[:, link_slice] = utils.phase_diff(ifg_data0, ifg_data1)
+
+
+def process_ifg2(ifg_grad, solver_space, cost):
+    # ifg_grad = grad_space[ii, :]
+
+    # Compute residues
+    residues = solver_space.compute_residues_from_gradients(ifg_grad)
+
+    # Unwrap the interferogram - sequential
+    flows = solver_space.residues_to_flows(residues, cost)
+
+    # Flood fill
+    return utils.flood_fill(ifg_grad, solver_space.edges, flows, mode="gradients")
