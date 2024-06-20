@@ -38,11 +38,12 @@ def merge_tiles(
     for ifg in ifgs:
         fnames.append(gen_settings.unw_filename(dates[ifg[0]], dates[ifg[1]]))
 
+    like_slc_file = stack.slc_files[dates[-1]]
     # If we only have to write one tile
     # Nothing to merge - just write to geotiff
     if len(tiles) == 1:
         logger.info(f"Writing single tile output to {gen_settings.output_folder}")
-        write_single_tile(tiles[0], fnames, tiledata.shape)
+        write_single_tile(tiles[0], fnames, tiledata.shape, like=like_slc_file)
         return fnames
 
     # Create overmap lap for the graph
@@ -73,7 +74,7 @@ def merge_tiles(
         _adjust_tiles(tiles, overlap_map, gen_settings, max_degree, debug_stats=False)
 
         # Write file to output
-        write_merged_band(tiles, fname, ii, tiledata.shape)
+        write_merged_band(tiles, fname, ii, tiledata.shape, like=like_slc_file)
     return fnames
 
 
