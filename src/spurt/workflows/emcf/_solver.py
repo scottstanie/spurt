@@ -263,13 +263,16 @@ class EMCFSolver:
         with ProcessPoolExecutor(max_workers=self.settings.worker_count) as executor:
             futures = [
                 executor.submit(
-                    _unwrap_ifg_in_space, grad_space[ii, :], self._solver_space, cost
+                    _unwrap_ifg_in_space,
+                    grad_space[ii, :],
+                    self._solver_space,
+                    cost,
+                    ii,
                 )
                 for ii in range(self.nifgs)
             ]
         for ii, fut in enumerate(as_completed(futures)):
             uw_data[ii, :] = fut.result()
-            logger.info(f"Completed spatial unwrapping {ii + 1} / {self.nifgs}")
 
         return uw_data
 
@@ -314,7 +317,7 @@ class EMCFSolver:
         grad_space[:, link_slice] = utils.phase_diff(ifg_data0, ifg_data1)
 
 
-def _unwrap_ifg_in_space(ifg_grad, solver_space, cost):
+def _unwrap_ifg_in_space(ifg_grad, solver_space, cost, ii):
     # ifg_grad = grad_space[ii, :]
 
     # Compute residues
@@ -324,4 +327,6 @@ def _unwrap_ifg_in_space(ifg_grad, solver_space, cost):
     flows = solver_space.residues_to_flows(residues, cost)
 
     # Flood fill
-    return utils.flood_fill(ifg_grad, solver_space.edges, flows, mode="gradients")
+    out = utils.flood_fill(ifg_grad, solver_space.edges, flows, mode="gradients")
+    logger.info(f"Completed spatial unwrapping {ii + 1}")
+    return out
