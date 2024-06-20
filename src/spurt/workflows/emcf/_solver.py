@@ -223,7 +223,11 @@ class EMCFSolver:
             # Unwrap the batch
             logger.info(f"Temporal: Unwrapping batch {bb + 1}/{nbatches}")
             flows = self._solver_time.residues_to_flows_many(
-                residues, cost, worker_count=self.settings.worker_count
+                # residues, cost, worker_count=self.settings.worker_count
+                # TODO: with spawn, it is slower to use multi processing
+                residues,
+                cost,
+                worker_count=1,
             )
 
             # Update the spatial gradients with estimated flows

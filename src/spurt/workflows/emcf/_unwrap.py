@@ -36,13 +36,15 @@ def unwrap_tiles(
         coh = stack.read_temporal_coherence(tile.space)
 
         # Create spatial graph and solver
-        g_space = spurt.graph.DelaunayGraph(
-            np.column_stack(np.nonzero(coh > stack.temp_coh_threshold))
-        )
+        xy = np.column_stack(np.nonzero(coh > stack.temp_coh_threshold))
+        logger.info(f"Making spatial graph with {xy.shape} points")
+        g_space = spurt.graph.DelaunayGraph(xy)
+        logger.info("Making solver")
         s_space = spurt.mcf.ORMCFSolver(g_space)  # type: ignore[abstract]
 
         # EMCF solver
         solver = EMCFSolver(s_space, s_time, solv_settings)
+        logger.info("Reading tile...")
         wrap_data = stack.read_tile(tile.space)
         assert wrap_data.shape[1] == g_space.npoints
         logger.info(f"Time steps: {solver.nifgs}")
