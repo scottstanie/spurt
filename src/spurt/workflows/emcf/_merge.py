@@ -16,7 +16,7 @@ def merge_tiles(
     g_time: spurt.graph.GraphInterface,
     gen_settings: GeneralSettings,
     mrg_settings: MergerSettings,
-) -> None:
+) -> list[Path]:
     """Merge the different tiles."""
     if mrg_settings.method != "dirichlet":
         errmsg = "dirichlet is the only merge method supported."
@@ -43,7 +43,7 @@ def merge_tiles(
     if len(tiles) == 1:
         logger.info(f"Writing single tile output to {gen_settings.output_folder}")
         write_single_tile(tiles[0], fnames, tiledata.shape)
-        return
+        return fnames
 
     # Create overmap lap for the graph
     overlap_map = _get_overlap_map(gen_settings)
@@ -74,6 +74,7 @@ def merge_tiles(
 
         # Write file to output
         write_merged_band(tiles, fname, ii, tiledata.shape)
+    return fnames
 
 
 def _adjust_tiles(
