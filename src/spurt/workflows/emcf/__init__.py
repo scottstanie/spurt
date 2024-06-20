@@ -3,8 +3,8 @@ from ._solver import EMCFSolver as Solver
 
 __all__ = [
     "Solver",
-    "MergerSettings",
     "GeneralSettings",
+    "MergerSettings",
     "SolverSettings",
     "TilerSettings",
 ]

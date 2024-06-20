@@ -46,7 +46,7 @@ def merge_tiles(
         write_single_tile(tiles[0], fnames, tiledata.shape, like=like_slc_file)
         return fnames
 
-    # Create overmap lap for the graph
+    # Create overlap map for the graph
     overlap_map = _get_overlap_map(gen_settings)
     max_degree = 4
 
@@ -83,7 +83,8 @@ def _adjust_tiles(
     overlap_map: dict[int, list[int]],
     gen_settings: GeneralSettings,
     max_degree: int,
-    debug_stats: bool | None = None,
+    *,
+    debug_stats: bool = False,
 ) -> None:
     """Dirichlet-based tile adjustment described in [1]_.
 
@@ -92,9 +93,6 @@ def _adjust_tiles(
     .. [1] M. T. Calef, Olsen K. M., & Agram P. S., "Merging Point Data for
            InSAR Deformation Processing", in arXiv preprints arXiv:2405.06838, 2024.
     """
-    if debug_stats is None:
-        debug_stats = False
-
     # Start overlap processing
     for overlap_degree in range(int(max_degree), 1, -1):
         logger.info(f"Generating corrections for overlap degree: {overlap_degree}")
@@ -151,7 +149,14 @@ def _adjust_tiles(
 def _get_overlap_map(
     gen_settings: GeneralSettings,
 ) -> dict[int, list[int]]:
-    """Return overlap map for each tile."""
+    """Return overlap map for each tile.
+
+    Returns
+    -------
+    x: dict[int, list[int]]
+        The key represents the tile index and the value represents the list of
+        indices of tiles that the tile overlaps with.
+    """
     with h5py.File(str(gen_settings.overlap_filename), "r") as fid:
         npts = fid["conn_comp"].size
         olaps = fid["overlaps"][...]
