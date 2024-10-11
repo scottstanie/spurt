@@ -121,18 +121,22 @@ def main(args=None):
 
     # Run the workflow
     # Generate tiles
+    # TODO: stack.read_mask works here
     get_tiles(stack, gen_settings, tile_settings)
 
     # Unwrap tiles
+    # TODO: interface used here: read_mask(), and wrap_data = .read_tile(tile.space)
     unwrap_tiles(stack, g_time, gen_settings, slv_settings)
 
     # Compute overlap stats
     compute_phasediff_deciles(gen_settings, mrg_settings)
 
     # Compute bulk offsets
+    # TODO: all it needs here is the mask, not
     get_bulk_offsets(stack, gen_settings, mrg_settings)
 
     # Merge tiles and write output
+    # TODO: Just needs `dates` and `slc_files` here
     merge_tiles(stack, g_time, gen_settings, mrg_settings)
 
     logger.info("Completed EMCF workflow.")

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ._interface import IrregularReader
 from ._raster import Raster
 from ._three_d import Irreg3DInput
 
@@ -16,7 +17,7 @@ __all__ = [
 ]
 
 
-class SLCStackReader:
+class SLCStackReader(IrregularReader):
     """Read a SLC stack from single files.
 
     This is a specific type of stack where time domain represents acquisition
@@ -201,9 +202,9 @@ class SLCStackReader:
 
         return Irreg3DInput(arr, xy)
 
-    def read_temporal_coherence(
-        self,
-        space: tuple[slice, ...],
-    ) -> np.ndarray:
+    def read_temporal_coherence(self, space: tuple[slice, ...]) -> np.ndarray:
         """Return full temporal coherence."""
         return self._read_file(self.temp_coh_file, space)
+
+    def read_mask(self, space: tuple[slice, ...]) -> np.ndarray:
+        return self.read_temporal_coherence(space=space) > self.temp_coh_threshold

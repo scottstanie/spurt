@@ -58,6 +58,7 @@ def get_bulk_offsets(
     counts = np.zeros(ntiles)
 
     # Add counts of valid pixels in each tile
+    # TODO: READ MASK
     arr = stack.read_temporal_coherence(np.s_[:, :]) > stack.temp_coh_threshold
     for ii, tile in enumerate(tiledata.tiles):
         counts[ii] = np.sum(arr[tile.space])

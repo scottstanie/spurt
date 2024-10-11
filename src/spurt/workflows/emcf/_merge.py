@@ -35,6 +35,7 @@ def merge_tiles(
 
     # Preparing file names
     ifgs = g_time.links
+    # TODO: Just add `dates` and `slc_files` as inputs
     dates = stack.dates
     fnames: list[Path] = []
     for ifg in ifgs:
