@@ -9,9 +9,9 @@ import spurt
 from ._settings import GeneralSettings, SolverSettings
 from ._solver import EMCFSolver
 
-logger = spurt.utils.logger
-
 __all__ = ["unwrap_tiles"]
+
+logger = spurt.utils.logger
 
 
 def unwrap_tiles(
@@ -70,12 +70,9 @@ def _unwrap_one_tile(
 
     # Select valid pixels from coherence file
     logger.info(f"Processing tile: {tt+1}")
-    coh = stack.read_temporal_coherence(tile.space)
 
     # Create spatial graph and solver
-    g_space = spurt.graph.DelaunayGraph(
-        np.column_stack(np.nonzero(coh > stack.temp_coh_threshold))
-    )
+    g_space = spurt.graph.DelaunayGraph(np.column_stack(np.nonzero(stack.read_mask())))
     s_space = spurt.mcf.ORMCFSolver(g_space)  # type: ignore[abstract]
 
     # EMCF solver

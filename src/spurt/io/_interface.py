@@ -7,8 +7,6 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 from numpy.typing import ArrayLike
 
-from ._three_d import Irreg3DInput
-
 __all__ = [
     "InputInterface",
     "OutputInterface",
@@ -132,12 +130,3 @@ class OutputStackInterface(StackInterface, Protocol):
 
     def set_spatial_slice(self, key: int, array: ArrayLike) -> None:
         """Write a block of data in space."""
-
-
-@runtime_checkable
-class IrregularReader(Protocol):
-    """Interface for reading masked subsets from SLCs or interferograms."""
-
-    def read_mask(self, space: tuple[slice, ...]) -> np.ndarray: ...
-
-    def read_tile(self, space: tuple[slice, ...]) -> Irreg3DInput: ...

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Protocol, runtime_checkable
+
 import numpy as np
-from numpy.typing import ArrayLike, DTypeLike
+from numpy.typing import ArrayLike, DTypeLike, NDArray
 
 from ._interface import InputInterface, InputStackInterface
 
@@ -270,3 +272,14 @@ class Irreg3DInput(InputStackInterface):
             for ii in range(self._data.ndim)
         )
         return np.ravel(self._data[ind])
+
+
+@runtime_checkable
+class IrregularReader(Protocol):
+    """Interface for reading masked subsets from SLCs or interferograms."""
+
+    def read_mask(
+        self, space: tuple[slice, ...] | None = None
+    ) -> NDArray[np.bool_]: ...
+
+    def read_tile(self, space: tuple[slice, ...]) -> Irreg3DInput: ...

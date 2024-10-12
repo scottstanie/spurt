@@ -3,11 +3,9 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
-import spurt
+from spurt.utils import BBox
 
 from ._settings import GeneralSettings, MergerSettings
-
-logger = spurt.utils.logger
 
 __all__ = ["compute_phasediff_deciles"]
 
@@ -23,13 +21,15 @@ def compute_phasediff_deciles(
     histograms can be used for debugging and assessing quality of consistency
     betwen unwrapped results of individual tiles.
     """
+    from spurt.utils import TileSet, logger, merge
+
     # Check if already processed
     if gen_settings.overlap_filename.is_file():
         logger.info("Overlap file already exists. Skipping ...")
         return
 
     # Load tile info
-    tiledata = spurt.utils.TileSet.from_json(gen_settings.tiles_jsonname)
+    tiledata = TileSet.from_json(gen_settings.tiles_jsonname)
 
     # If single tile json - just return
     if tiledata.ntiles == 1:
@@ -55,7 +55,7 @@ def compute_phasediff_deciles(
             pt2, uw2 = _load_uw_tile(str(gen_settings.tile_filename(t2)), tile2)
 
         # Find common points
-        c1, c2 = spurt.utils.merge.find_common_points(pt1, pt2)
+        c1, c2 = merge.find_common_points(pt1, pt2)
 
         if len(c1) < mrg_settings.min_overlap_points:
             logger.info("Insufficient overlap. Skipping ...")
@@ -68,7 +68,7 @@ def compute_phasediff_deciles(
         # difference stats
         cuw1 = uw1[:, c1]
         cuw2 = uw2[:, c2]
-        stats = spurt.utils.merge.pairwise_unwrapped_diff_deciles(cuw1, cuw2)
+        stats = merge.pairwise_unwrapped_diff_deciles(cuw1, cuw2)
         grpname = gen_settings.overlap_groupname(t1, t2)
         with h5py.File(overlap_file, "a") as fid:
             grp = fid.create_group(grpname)
@@ -90,7 +90,7 @@ def compute_phasediff_deciles(
         fid["overlaps"] = np.array(overlaps, dtype=np.int16)
 
 
-def _load_uw_tile(fname: str, tile: spurt.utils.BBox) -> tuple[np.ndarray, np.ndarray]:
+def _load_uw_tile(fname: str, tile: BBox) -> tuple[np.ndarray, np.ndarray]:
     """Load data from tile h5 file."""
     with h5py.File(fname, "r") as fid:
         pts = fid["points"][...]

@@ -7,10 +7,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 
-from ._interface import IrregularReader
 from ._raster import Raster
-from ._three_d import Irreg3DInput
+from ._three_d import Irreg3DInput, IrregularReader
 
 __all__ = [
     "SLCStackReader",
@@ -206,5 +206,7 @@ class SLCStackReader(IrregularReader):
         """Return full temporal coherence."""
         return self._read_file(self.temp_coh_file, space)
 
-    def read_mask(self, space: tuple[slice, ...]) -> np.ndarray:
+    def read_mask(self, space: tuple[slice, ...] | None = None) -> NDArray[np.bool_]:
+        if space is None:
+            space = np.s_[:, :]
         return self.read_temporal_coherence(space=space) > self.temp_coh_threshold

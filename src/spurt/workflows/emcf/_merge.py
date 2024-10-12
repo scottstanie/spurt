@@ -1,31 +1,32 @@
+import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import h5py
 import numpy as np
 
-import spurt
-
 from ._output import Tile, write_merged_band, write_single_tile
 from ._settings import GeneralSettings, MergerSettings
-
-logger = spurt.utils.logger
 
 __all__ = ["merge_tiles"]
 
 
 def merge_tiles(
-    stack: spurt.io.SLCStackReader,
-    g_time: spurt.graph.GraphInterface,
+    dates: Sequence[str],
+    like_slc_file: str | os.PathLike[str],
+    ifgs: np.ndarray,
     gen_settings: GeneralSettings,
     mrg_settings: MergerSettings,
 ) -> list[Path]:
     """Merge the different tiles."""
+    from spurt.utils import TileSet, logger
+
     if mrg_settings.method != "dirichlet":
         errmsg = "dirichlet is the only merge method supported."
         raise NotImplementedError(errmsg)
 
     # Load tile json
-    tiledata = spurt.utils.TileSet.from_json(gen_settings.tiles_jsonname)
+    tiledata = TileSet.from_json(gen_settings.tiles_jsonname)
 
     # Tile manager for each tile
     tiles: dict[int, Tile] = {}
@@ -34,14 +35,10 @@ def merge_tiles(
         tiles[ii] = Tile(str(gen_settings.tile_filename(ii)))
 
     # Preparing file names
-    ifgs = g_time.links
-    # TODO: Just add `dates` and `slc_files` as inputs
-    dates = stack.dates
     fnames: list[Path] = []
     for ifg in ifgs:
         fnames.append(gen_settings.unw_filename(dates[ifg[0]], dates[ifg[1]]))
 
-    like_slc_file = stack.slc_files[dates[-1]]
     # If we only have to write one tile
     # Nothing to merge - just write to geotiff
     if len(tiles) == 1:
@@ -125,6 +122,8 @@ def _adjust_tiles(
     .. [1] M. T. Calef, Olsen K. M., & Agram P. S., "Merging Point Data for
            InSAR Deformation Processing", in arXiv preprints arXiv:2405.06838, 2024.
     """
+    from spurt.utils import logger, merge
+
     # Start overlap processing
     for overlap_degree in range(int(max_degree), 1, -1):
         logger.info(f"Generating corrections for overlap degree: {overlap_degree}")
@@ -151,7 +150,7 @@ def _adjust_tiles(
 
             logger.info("Solving Dirichlet problem")
 
-            correction = spurt.utils.merge.dirichlet_graph(
+            correction = merge.dirichlet_graph(
                 tile_i.graph_laplacian,
                 raw_correction,
                 c >= overlap_degree,

@@ -1,6 +1,6 @@
 import h5py
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from ortools.linear_solver import pywraplp
 
 import spurt
@@ -13,7 +13,7 @@ __all__ = ["get_bulk_offsets"]
 
 
 def get_bulk_offsets(
-    stack: spurt.io.SLCStackReader,
+    mask: NDArray[np.bool_],
     gen_settings: GeneralSettings,
     mrg_settings: MergerSettings,
 ) -> None:
@@ -58,10 +58,8 @@ def get_bulk_offsets(
     counts = np.zeros(ntiles)
 
     # Add counts of valid pixels in each tile
-    # TODO: READ MASK
-    arr = stack.read_temporal_coherence(np.s_[:, :]) > stack.temp_coh_threshold
     for ii, tile in enumerate(tiledata.tiles):
-        counts[ii] = np.sum(arr[tile.space])
+        counts[ii] = np.sum(mask[tile.space])
 
     # If integer solver requested
     logger.info(f"Solving for bulk offsets with method: {mrg_settings.method}")

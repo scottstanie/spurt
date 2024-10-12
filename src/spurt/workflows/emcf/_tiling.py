@@ -1,16 +1,13 @@
 import numpy as np
-
-import spurt
+from numpy.typing import NDArray
 
 from ._settings import GeneralSettings, TilerSettings
-
-logger = spurt.utils.logger
 
 __all__ = ["get_tiles"]
 
 
 def get_tiles(
-    stack: spurt.io.SLCStackReader,
+    mask: NDArray[np.bool_],
     gen_settings: GeneralSettings,
     tile_settings: TilerSettings,
 ) -> None:
@@ -19,6 +16,8 @@ def get_tiles(
     Create a JSON file with tile information in the intermediate folder.
     Tiles are not regenerated if the JSON file is already present.
     """
+    from spurt.utils import TileSet, create_tiles_density, logger
+
     json_file = gen_settings.tiles_jsonname
 
     # Generate tiles if file doesn't exist
@@ -28,19 +27,18 @@ def get_tiles(
 
     # Actual tile generation
     logger.info("Generating tiles for stack")
-    arr = stack.read_temporal_coherence(np.s_[:, :]) > stack.temp_coh_threshold
-    logger.info(f"Stack shape for generating tiles: {arr.shape}")
+    logger.info(f"Stack shape for generating tiles: {mask.shape}")
 
     # No tiles requested
     if not gen_settings.use_tiles:
-        tileset = spurt.utils.TileSet.single_tile(arr.shape)
+        tileset = TileSet.single_tile(mask.shape)
 
     # Generate tiles and write
     else:
         # Get points
-        pts = np.column_stack(np.nonzero(arr))
+        pts = np.column_stack(np.nonzero(mask))
         logger.info(f"Number of points: {pts.shape[0]}")
-        logger.info(f"Fraction good:  {pts.shape[0] / arr.size:.3f}")
+        logger.info(f"Fraction good:  {pts.shape[0] / mask.size:.3f}")
 
         # Skip points as needed for tile generation
         skip = max(1, int(len(pts) / tile_settings.target_points_for_generation))
@@ -52,8 +50,8 @@ def get_tiles(
         logger.info(f"Generating {ntiles} tiles.")
 
         # Set up tiles
-        tileset = spurt.utils.create_tiles_density(
-            pts[::skip, :], shape=arr.shape, max_tiles=ntiles
+        tileset = create_tiles_density(
+            pts[::skip, :], shape=mask.shape, max_tiles=ntiles
         )
 
     # Dilate tiles to create overlaps
