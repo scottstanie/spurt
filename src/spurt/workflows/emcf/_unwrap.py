@@ -25,7 +25,11 @@ def unwrap_tiles(
     tile_json = gen_settings.tiles_jsonname
     tiledata = spurt.utils.TileSet.from_json(tile_json)
 
-    with ProcessPoolExecutor(max_workers=solv_settings.num_parallel_tiles) as executor:
+    max_workers = solv_settings.num_parallel_tiles
+    executor_class = (
+        ProcessPoolExecutor if max_workers > 1 else spurt.utils.DummyProcessPoolExecutor
+    )
+    with executor_class(max_workers=max_workers) as executor:
         futures = []
 
         # Iterate over tiles

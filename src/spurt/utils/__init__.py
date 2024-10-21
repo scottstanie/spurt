@@ -1,5 +1,5 @@
 from . import merge
-from ._cpu import get_cpu_count
+from ._cpu import DummyProcessPoolExecutor, get_cpu_count
 from ._logger import logger
 from ._tiling import BBox, TileSet, create_tiles_density, create_tiles_regular
 
@@ -10,5 +10,6 @@ __all__ = [
     "create_tiles_density",
     "create_tiles_regular",
     "BBox",
+    "DummyProcessPoolExecutor",
     "TileSet",
 ]
