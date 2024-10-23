@@ -1,7 +1,7 @@
 import math
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
-from multiprocessing import cpu_count
+from multiprocessing import Lock, cpu_count
 from pathlib import Path
 from typing import Optional, ParamSpec, TypeVar
 
@@ -46,19 +46,34 @@ class DummyProcessPoolExecutor(Executor):
 
     def __init__(self, max_workers: Optional[int] = None, **kwargs):  # noqa: ARG002
         self._max_workers = max_workers
+        self._shutdown = False
+        self._shutdownLock = Lock()
 
     def submit(
         self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
     ) -> Future[T]:
-        future: Future = Future()
-        result = fn(*args, **kwargs)
-        future.set_result(result)
-        return future
+        with self._shutdownLock:
+            if self._shutdown:
+                msg = "Cannot schedule new futures after shutdown"
+                raise RuntimeError(msg)
+
+            future: Future = Future()
+            try:
+                result = fn(*args, **kwargs)
+            except BaseException as e:
+                future.set_exception(e)
+            else:
+                future.set_result(result)
+
+            return future
 
     def shutdown(
-        self, wait: bool = True, cancel_futures: bool = True  # noqa: FBT001, FBT002
+        self,
+        wait: bool = True,  # noqa: FBT001, FBT002, ARG002
+        cancel_futures: bool = True,  # noqa: FBT001, FBT002, ARG002
     ):
-        pass
+        with self._shutdownLock:
+            self._shutdown = True
 
     def map(self, fn: Callable[P, T], *iterables, **kwargs):  # noqa: ARG002
         return map(fn, *iterables)
