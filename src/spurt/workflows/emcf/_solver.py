@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from itertools import repeat
+from multiprocessing import get_context
 
 import numpy as np
 
@@ -243,8 +244,8 @@ class EMCFSolver:
             errmsg = f"Unknown cost type: {self.settings.s_cost_type}"
             raise ValueError(errmsg)
 
-        # Create output array
-        uw_data = np.zeros((self.nifgs, self.npoints), dtype=np.float32)
+        # # Create output array
+        # uw_data = np.zeros((self.nifgs, self.npoints), dtype=np.float32)
 
         logger.info(f"Spatial: Number of interferograms: {self.nifgs}")
         logger.info(f"Spatial: Number of links: {self.nlinks}")
@@ -253,21 +254,33 @@ class EMCFSolver:
         nworkers = self.settings.s_worker_count
         if nworkers < 1:
             nworkers = get_cpu_count() - 1
-        with ProcessPoolExecutor(max_workers=nworkers) as executor:
-            futures = [
-                executor.submit(
-                    _unwrap_ifg_in_space,
-                    grad_space[ii, :],
-                    self._solver_space,
-                    cost,
-                    ii,
-                )
-                for ii in range(self.nifgs)
-            ]
-            for fut in as_completed(futures):
-                ii, data = fut.result()
-                uw_data[ii, :] = data
-        return uw_data
+        with get_context("fork").Pool(processes=nworkers) as p:
+            result_list = p.starmap(
+                _unwrap_ifg_in_space,
+                (
+                    (grad_space[ii, :], repeat(self._solver_space), repeat(cost), ii)
+                    for ii in range(self.nifgs)
+                ),
+            )
+        return np.array(result_list)
+        # executor_class = (
+        #     ProcessPoolExecutor if nworkers > 1 else DummyProcessPoolExecutor
+        # )
+        # with executor_class(max_workers=nworkers) as executor:
+        #     futures = [
+        #         executor.submit(
+        #             _unwrap_ifg_in_space,
+        #             grad_space[ii, :],
+        #             self._solver_space,
+        #             cost,
+        #             ii,
+        #         )
+        #         for ii in range(self.nifgs)
+        #     ]
+        #     for fut in as_completed(futures):
+        #         ii, data = fut.result()
+        #         uw_data[ii, :] = data
+        # return uw_data
 
     def _ifg_spatial_gradients_from_slc(
         self,

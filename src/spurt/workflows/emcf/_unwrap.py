@@ -1,4 +1,3 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import h5py
@@ -24,35 +23,48 @@ def unwrap_tiles(
     # Load tile set
     tile_json = gen_settings.tiles_jsonname
     tiledata = spurt.utils.TileSet.from_json(tile_json)
+    for tt in range(tiledata.ntiles):
+        tfname = str(gen_settings.tile_filename(tt))
+        if Path(tfname).is_file():
+            logger.info(f"Tile {tt+1} already processed. Skipping...")
+            continue
+        _unwrap_one_tile(
+            stack,
+            tile_json,
+            tfname,
+            g_time,
+            solv_settings,
+            tt,
+        )
 
-    max_workers = solv_settings.num_parallel_tiles
-    executor_class = (
-        ProcessPoolExecutor if max_workers > 1 else spurt.utils.DummyProcessPoolExecutor
-    )
-    with executor_class(max_workers=max_workers) as executor:
-        futures = []
+    # max_workers = solv_settings.num_parallel_tiles
+    # executor_class = (
+    #   ProcessPoolExecutor if max_workers > 1 else spurt.utils.DummyProcessPoolExecutor
+    # )
+    # with executor_class(max_workers=max_workers) as executor:
+    #     futures = []
 
-        # Iterate over tiles
-        for tt in range(tiledata.ntiles):
-            tfname = str(gen_settings.tile_filename(tt))
-            if Path(tfname).is_file():
-                logger.info(f"Tile {tt+1} already processed. Skipping...")
-                continue
+    #     # Iterate over tiles
+    #     for tt in range(tiledata.ntiles):
+    #         tfname = str(gen_settings.tile_filename(tt))
+    #         if Path(tfname).is_file():
+    #             logger.info(f"Tile {tt+1} already processed. Skipping...")
+    #             continue
 
-            futures.append(
-                executor.submit(
-                    _unwrap_one_tile,
-                    stack,
-                    tile_json,
-                    tfname,
-                    g_time,
-                    solv_settings,
-                    tt,
-                )
-            )
+    #         futures.append(
+    #             executor.submit(
+    #                 _unwrap_one_tile,
+    #                 stack,
+    #                 tile_json,
+    #                 tfname,
+    #                 g_time,
+    #                 solv_settings,
+    #                 tt,
+    #             )
+    #         )
 
-        for fut in as_completed(futures):
-            fut.result()
+    #     for fut in as_completed(futures):
+    #         fut.result()
 
 
 def _unwrap_one_tile(
