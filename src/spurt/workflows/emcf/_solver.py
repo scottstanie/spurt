@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import repeat
 from multiprocessing import get_context
 
 import numpy as np
@@ -258,7 +257,7 @@ class EMCFSolver:
             result_list = p.starmap(
                 _unwrap_ifg_in_space,
                 (
-                    (grad_space[ii, :], repeat(self._solver_space), repeat(cost), ii)
+                    (grad_space[ii, :], self._solver_space, cost, ii)
                     for ii in range(self.nifgs)
                 ),
             )
