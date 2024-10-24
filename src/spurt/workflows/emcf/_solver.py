@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from multiprocessing import get_context
+from operator import itemgetter
 
 import numpy as np
 
@@ -254,14 +255,14 @@ class EMCFSolver:
         if nworkers < 1:
             nworkers = get_cpu_count() - 1
         with get_context("fork").Pool(processes=nworkers) as p:
-            result_list = p.starmap(
+            result_list = list(p.starmap(
                 _unwrap_ifg_in_space,
                 (
                     (grad_space[ii, :], self._solver_space, cost, ii)
                     for ii in range(self.nifgs)
                 ),
-            )
-        return np.array(result_list)
+            ))
+        return np.array([res[1] for res in sorted(result_list, key=itemgetter(0))])
         # executor_class = (
         #     ProcessPoolExecutor if nworkers > 1 else DummyProcessPoolExecutor
         # )
