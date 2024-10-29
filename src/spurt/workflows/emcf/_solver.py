@@ -244,9 +244,6 @@ class EMCFSolver:
             errmsg = f"Unknown cost type: {self.settings.s_cost_type}"
             raise ValueError(errmsg)
 
-        # # Create output array
-        # uw_data = np.zeros((self.nifgs, self.npoints), dtype=np.float32)
-
         logger.info(f"Spatial: Number of interferograms: {self.nifgs}")
         logger.info(f"Spatial: Number of links: {self.nlinks}")
         logger.info(f"Spatial: Number of cycles: {self._solver_space.ncycles}")
@@ -254,33 +251,21 @@ class EMCFSolver:
         nworkers = self.settings.s_worker_count
         if nworkers < 1:
             nworkers = get_cpu_count() - 1
+        # Using spawn currently uses much more memory than `fork`, due to the
+        # arrays within `_solver_space` that are copied.
+        # More work is needed to allow `spawn` to run with similar memory usage.
         with get_context("fork").Pool(processes=nworkers) as p:
-            result_list = list(p.starmap(
-                _unwrap_ifg_in_space,
-                (
-                    (grad_space[ii, :], self._solver_space, cost, ii)
-                    for ii in range(self.nifgs)
-                ),
-            ))
+            result_list = list(
+                p.starmap(
+                    _unwrap_ifg_in_space,
+                    (
+                        (grad_space[ii, :], self._solver_space, cost, ii)
+                        for ii in range(self.nifgs)
+                    ),
+                )
+            )
+        # Ensure the results are sorted by ifg index
         return np.array([res[1] for res in sorted(result_list, key=itemgetter(0))])
-        # executor_class = (
-        #     ProcessPoolExecutor if nworkers > 1 else DummyProcessPoolExecutor
-        # )
-        # with executor_class(max_workers=nworkers) as executor:
-        #     futures = [
-        #         executor.submit(
-        #             _unwrap_ifg_in_space,
-        #             grad_space[ii, :],
-        #             self._solver_space,
-        #             cost,
-        #             ii,
-        #         )
-        #         for ii in range(self.nifgs)
-        #     ]
-        #     for fut in as_completed(futures):
-        #         ii, data = fut.result()
-        #         uw_data[ii, :] = data
-        # return uw_data
 
     def _ifg_spatial_gradients_from_slc(
         self,
