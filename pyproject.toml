@@ -59,6 +59,7 @@ Issues = "https://github.com/isce-framework/spurt/issues"
 # Entry points for the command line interface
 [project.scripts]
 spurt-emcf = "spurt.workflows.emcf:__main__"
+spurt-dem-error = "spurt.workflows.emcf._cli:dem_error_main"
 
 [tool.black]
 preview = true

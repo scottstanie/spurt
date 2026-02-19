@@ -189,3 +189,87 @@ def test_integrate_link_params_without_model():
 
     with pytest.raises(RuntimeError, match="No link parameters available"):
         solver.integrate_link_params()
+
+
+def test_estimate_dem_error_one_tile():
+    """Test DEM error estimation without full unwrapping produces valid output."""
+    n_sar, times, phase, true_vel = gen_data_with_velocity()
+    igram = np.exp(1j * phase)
+
+    g_time = spurt.graph.Hop3Graph(n_sar)
+    g_space = spurt.graph.Reg2DGraph(igram.shape[1:])
+
+    # Build design matrix for velocity estimation
+    nifgs = len(g_time.links)
+    amat = np.zeros((nifgs, 1))
+    for ii, edge in enumerate(g_time.links):
+        amat[ii, 0] = times[edge[1]] - times[edge[0]]
+
+    vel_range = slice(-0.5, 0.1, 0.02)
+    link_model = spurt.links.GridSearchLinearModel(matrix=amat, ranges=(vel_range,))
+
+    # Run model estimation in batches (mimicking _estimate_dem_error_one_tile logic)
+    edges = g_space.links
+    nlinks = len(edges)
+    ifg_inds = g_time.links
+    wrap_data = igram.reshape((n_sar, g_space.npoints))
+
+    link_params = np.zeros((link_model.ndim, nlinks), dtype=np.float32)
+    link_coherence = np.zeros(nlinks, dtype=np.float32)
+
+    batch_size = 10000
+    nbatches = ((nlinks - 1) // batch_size) + 1
+
+    for bb in range(nbatches):
+        i_start = bb * batch_size
+        i_end = min(i_start + batch_size, nlinks)
+        if i_end == i_start:
+            continue
+
+        inds = edges[i_start:i_end, :]
+
+        # SLC -> IFG -> spatial gradients
+        slc0 = wrap_data[:, inds[:, 0]]
+        slc1 = wrap_data[:, inds[:, 1]]
+        ifg0 = spurt.mcf.utils.phase_diff(
+            slc0[ifg_inds[:, 0], :], slc0[ifg_inds[:, 1], :]
+        )
+        ifg1 = spurt.mcf.utils.phase_diff(
+            slc1[ifg_inds[:, 0], :], slc1[ifg_inds[:, 1], :]
+        )
+        grads = spurt.mcf.utils.phase_diff(ifg0, ifg1)
+
+        batch_params, batch_coh = link_model.estimate_model_many(grads, worker_count=1)
+
+        link_params[:, i_start:i_end] = batch_params
+        link_coherence[i_start:i_end] = batch_coh
+
+    # Verify results are consistent with full EMCF solver
+    assert link_params.shape == (1, nlinks)
+    assert link_coherence.shape == (nlinks,)
+
+    # High coherence expected for clean synthetic data
+    assert np.mean(link_coherence) > 0.95
+
+    # Integrate link params to check spatial pattern
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.linalg import lsqr
+
+    data = np.ones(2 * nlinks, dtype=np.float64)
+    data[0::2] = -1.0
+    data[1::2] = 1.0
+    row_indices = np.repeat(np.arange(nlinks), 2)
+    col_indices = edges.flatten()
+    incidence = csr_matrix(
+        (data, (row_indices, col_indices)), shape=(nlinks, g_space.npoints)
+    )
+    result = lsqr(incidence[:, 1:], link_params[0, :].astype(np.float64))
+    point_vel = np.zeros(g_space.npoints, dtype=np.float64)
+    point_vel[1:] = result[0]
+
+    # Spatial pattern should correlate with true velocity
+    true_vel_flat = true_vel.flatten()
+    point_vel_ref = point_vel - point_vel[0]
+    true_vel_ref = true_vel_flat - true_vel_flat[0]
+    correlation = np.corrcoef(point_vel_ref, true_vel_ref)[0, 1]
+    assert correlation > 0.95

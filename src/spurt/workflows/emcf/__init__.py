@@ -10,7 +10,7 @@ from ._settings import (
 )
 from ._solver import EMCFSolver as Solver
 from ._tiling import get_tiles
-from ._unwrap import unwrap_tiles
+from ._unwrap import estimate_dem_error_tiles, unwrap_tiles
 
 __all__ = [
     "GeneralSettings",
@@ -20,6 +20,7 @@ __all__ = [
     "SolverSettings",
     "TilerSettings",
     "compute_phasediff_deciles",
+    "estimate_dem_error_tiles",
     "get_bulk_offsets",
     "get_tiles",
     "merge_tiles",

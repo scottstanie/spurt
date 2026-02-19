@@ -12,7 +12,7 @@ from ._solver import EMCFSolver
 
 logger = spurt.utils.logger
 
-__all__ = ["unwrap_tiles"]
+__all__ = ["estimate_dem_error_tiles", "unwrap_tiles"]
 
 
 def unwrap_tiles(
@@ -37,7 +37,7 @@ def unwrap_tiles(
         for tt in range(tiledata.ntiles):
             tfname = str(gen_settings.tile_filename(tt))
             if Path(tfname).is_file():
-                logger.info(f"Tile {tt+1} already processed. Skipping...")
+                logger.info(f"Tile {tt + 1} already processed. Skipping...")
                 continue
 
             futures[
@@ -56,6 +56,162 @@ def unwrap_tiles(
         for fut in as_completed(futures):
             fut.result()
             futures.pop(fut)
+
+
+def estimate_dem_error_tiles(
+    stack: spurt.io.SLCStackReader,
+    g_time: spurt.graph.PlanarGraphInterface,
+    gen_settings: GeneralSettings,
+    solv_settings: SolverSettings,
+    link_model_settings: LinkModelSettings,
+) -> None:
+    """Estimate DEM error and velocity per tile without full unwrapping.
+
+    Runs just the link model estimation (grid search for velocity and DEM
+    error) on spatial gradients, skipping the temporal and spatial MCF
+    unwrapping. Produces tile HDF5 files containing link_params,
+    link_coherence, points, and tile metadata -- enough for
+    `write_link_params` to integrate and write output GeoTIFFs.
+
+    Parameters
+    ----------
+    stack : spurt.io.SLCStackReader
+        SLC stack reader providing phase data and metadata.
+    g_time : spurt.graph.PlanarGraphInterface
+        Temporal graph (e.g. Hop3Graph) defining interferogram pairs.
+    gen_settings : GeneralSettings
+        General settings with tile filenames and output folder.
+    solv_settings : SolverSettings
+        Solver settings (used for worker counts and batch size).
+    link_model_settings : LinkModelSettings
+        Link model settings (baseline CSV, SAR parameters, search ranges).
+    """
+    tile_json = gen_settings.tiles_jsonname
+    tiledata = spurt.utils.TileSet.from_json(tile_json)
+
+    mp_context = mp.get_context("fork")
+    with ProcessPoolExecutor(
+        max_workers=solv_settings.num_parallel_tiles, mp_context=mp_context
+    ) as executor:
+        futures = {}
+
+        for tt in range(tiledata.ntiles):
+            tfname = str(gen_settings.tile_filename(tt))
+            if Path(tfname).is_file():
+                logger.info(f"Tile {tt + 1} already processed. Skipping...")
+                continue
+
+            futures[
+                executor.submit(
+                    _estimate_dem_error_one_tile,
+                    stack,
+                    tile_json,
+                    tfname,
+                    g_time,
+                    solv_settings,
+                    tt,
+                    link_model_settings,
+                )
+            ] = tt
+
+        for fut in as_completed(futures):
+            fut.result()
+            futures.pop(fut)
+
+
+def _estimate_dem_error_one_tile(
+    stack: spurt.io.SLCStackReader,
+    tile_json: Path,
+    tile_output: str,
+    g_time: spurt.graph.PlanarGraphInterface,
+    solv_settings: SolverSettings,
+    tile_num: int,
+    link_model_settings: LinkModelSettings,
+) -> None:
+    """Estimate DEM error and velocity for a single tile.
+
+    Computes wrapped spatial gradients on Delaunay links, then runs grid
+    search + Nelder-Mead to estimate per-link velocity and DEM error.
+    No MCF unwrapping is performed.
+    """
+    tiledata = spurt.utils.TileSet.from_json(tile_json)
+    tile = tiledata.tiles[tile_num]
+    tt = tile_num
+
+    logger.info(f"Estimating DEM error for tile: {tt + 1}")
+    coh = stack.read_temporal_coherence(tile.space)
+
+    # Create spatial graph
+    g_space = spurt.graph.DelaunayGraph(
+        np.column_stack(np.nonzero(coh > stack.temp_coh_threshold))
+    )
+
+    # Build link model
+    link_model = _build_link_model(g_time, stack.dates, link_model_settings)
+
+    # Read wrapped data
+    wrap_data = stack.read_tile(tile.space)
+    assert wrap_data.shape[1] == g_space.npoints
+    edges = g_space.links
+    ifg_inds = g_time.links
+    nifgs = len(ifg_inds)
+    nlinks = len(edges)
+    input_is_ifg = wrap_data.data.shape[0] == nifgs
+
+    logger.info(f"Number of points: {g_space.npoints}")
+    logger.info(f"Number of links: {nlinks}")
+
+    link_params = np.zeros((link_model.ndim, nlinks), dtype=np.float32)
+    link_coherence = np.zeros(nlinks, dtype=np.float32)
+
+    nbatches = ((nlinks - 1) // solv_settings.links_per_batch) + 1
+
+    for bb in range(nbatches):
+        i_start = bb * solv_settings.links_per_batch
+        i_end = min(i_start + solv_settings.links_per_batch, nlinks)
+        if i_end == i_start:
+            continue
+
+        inds = edges[i_start:i_end, :]
+
+        # Compute wrapped spatial gradients for this batch
+        if input_is_ifg:
+            grads = spurt.mcf.utils.phase_diff(
+                wrap_data.data[:, inds[:, 0]], wrap_data.data[:, inds[:, 1]]
+            )
+        else:
+            # Form interferograms then compute spatial gradients
+            slc0 = wrap_data.data[:, inds[:, 0]]
+            slc1 = wrap_data.data[:, inds[:, 1]]
+            ifg0 = spurt.mcf.utils.phase_diff(
+                slc0[ifg_inds[:, 0], :], slc0[ifg_inds[:, 1], :]
+            )
+            ifg1 = spurt.mcf.utils.phase_diff(
+                slc1[ifg_inds[:, 0], :], slc1[ifg_inds[:, 1], :]
+            )
+            grads = spurt.mcf.utils.phase_diff(ifg0, ifg1)
+
+        assert grads.shape == (nifgs, i_end - i_start)
+
+        logger.info(f"DEM error: Estimating model for batch {bb + 1}/{nbatches}")
+        batch_params, batch_coh = link_model.estimate_model_many(
+            grads,
+            worker_count=solv_settings.t_worker_count,
+        )
+
+        link_params[:, i_start:i_end] = batch_params
+        link_coherence[i_start:i_end] = batch_coh
+
+    logger.info(f"Completed DEM error estimation for tile: {tt + 1}")
+
+    # Save results
+    with h5py.File(tile_output, "w") as fid:
+        fid["points"] = g_space.points.astype(np.int32)
+        fid["tile"] = np.array(tile.tolist()).astype(np.int32)
+        fid["link_params"] = link_params.astype(np.float32)
+        fid["link_coherence"] = link_coherence.astype(np.float32)
+
+    logger.info(f"Wrote tile {tt + 1} to {tile_output}")
 
 
 def _unwrap_one_tile(
@@ -77,7 +233,7 @@ def _unwrap_one_tile(
     s_time = spurt.mcf.ORMCFSolver(g_time)  # type: ignore[abstract]
 
     # Select valid pixels from coherence file
-    logger.info(f"Processing tile: {tt+1}")
+    logger.info(f"Processing tile: {tt + 1}")
     coh = stack.read_temporal_coherence(tile.space)
 
     # Create spatial graph and solver
@@ -99,7 +255,7 @@ def _unwrap_one_tile(
     logger.info(f"Number of points: {solver.npoints}")
 
     uw_data = solver.unwrap_cube(wrap_data)
-    logger.info(f"Completed tile: {tt+1}")
+    logger.info(f"Completed tile: {tt + 1}")
 
     # Unwrapped data above is always referenced to first pixel
     # since we unwrap gradients. Phase offsets for the first
