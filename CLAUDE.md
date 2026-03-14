@@ -80,14 +80,14 @@ SPURT implements Extended Minimum Cost Flow (EMCF) for 3D InSAR phase unwrapping
 
 ### Module Structure (`src/spurt/`)
 
-| Module | Purpose |
-|--------|---------|
-| `graph/` | Graph representations (Delaunay, Hop3, Regular2D) for spatial/temporal domains |
-| `mcf/` | Minimum Cost Flow solver (OR-Tools based) and utilities |
-| `links/` | Per-link model estimation (DEM errors, velocities) via grid search |
-| `workflows/emcf/` | Main EMCF algorithm orchestration, tiling, merging |
-| `io/` | Input/output interfaces for SLC stacks and 3D data |
-| `utils/` | Logging, CPU utilities, tiling helpers |
+| Module            | Purpose                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `graph/`          | Graph representations (Delaunay, Hop3, Regular2D) for spatial/temporal domains |
+| `mcf/`            | Minimum Cost Flow solver (OR-Tools based) and utilities                        |
+| `links/`          | Per-link model estimation (DEM errors, velocities) via grid search             |
+| `workflows/emcf/` | Main EMCF algorithm orchestration, tiling, merging                             |
+| `io/`             | Input/output interfaces for SLC stacks and 3D data                             |
+| `utils/`          | Logging, CPU utilities, tiling helpers                                         |
 
 ### Algorithm Flow
 
@@ -103,7 +103,7 @@ SPURT implements Extended Minimum Cost Flow (EMCF) for 3D InSAR phase unwrapping
 
 ### Key Files
 
-- `mcf/_ortools.py` - Core MCF solver using OR-Tools (`ORMCFSolver`)
+- `mcf/_ortools.py` - Core MCF solver using OR-Tools (`ORMCFSolver`) or whirlwind (`WhirlwindMCFSolver`)
 - `mcf/utils.py` - `phase_diff()`, `flood_fill()`, cost functions
 - `links/_grid_search.py` - `GridSearchLinearModel` for velocity/DEM error estimation
 - `links/_common.py` - Temporal coherence objective function

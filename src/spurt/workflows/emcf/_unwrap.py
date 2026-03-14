@@ -75,6 +75,7 @@ def _unwrap_one_tile(
 
     # Temporal solver
     s_time = spurt.mcf.ORMCFSolver(g_time)  # type: ignore[abstract]
+    s_time = spurt.mcf.WhirlwindMCFSolver(g_time)  # type: ignore[abstract]
 
     # Select valid pixels from coherence file
     logger.info(f"Processing tile: {tt+1}")
@@ -84,7 +85,8 @@ def _unwrap_one_tile(
     g_space = spurt.graph.DelaunayGraph(
         np.column_stack(np.nonzero(coh > stack.temp_coh_threshold))
     )
-    s_space = spurt.mcf.ORMCFSolver(g_space)  # type: ignore[abstract]
+    # s_space = spurt.mcf.ORMCFSolver(g_space)  # type: ignore[abstract]
+    s_space = spurt.mcf.WhirlwindMCFSolver(g_space)  # type: ignore[abstract]
 
     # Build link model if settings provided
     link_model = None
